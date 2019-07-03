@@ -4,10 +4,10 @@ import os
 import re
 import threading
 import time
-import Order
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from wxpy import *
+from Order import *
 
 import FixedReply
 import TuLingReply
@@ -18,9 +18,9 @@ from Logger import Logger
 
 # 微信机器人
 # linux 下执行
-#robot = Bot(console_qr=1, cache_path=True)
+# robot = Bot(console_qr=1, cache_path=True)
 # win 执行
-robot=Bot(True)
+robot = Bot(True)
 log = Logger('WeChatRobot.log', level='info')
 log.logger.info('--------WeChatRobot 开始启动----------')
 # 定义远程管理员 (用于远程管理)，使用备注名更安全
@@ -44,16 +44,16 @@ robot_master.send('机器人上线\n当前管理员组--{}'.format(group_admin))
 log.logger.info('--------WeChatRobot 机器人上线----------')
 # mps = robot.mps(update=True)
 group_1 = robot.groups().search('打卡提醒，打卡提醒')[0]
-group_2 = robot.groups().search('只是爱要怎么说 出口')[0]
+group_2 = {}
 # 订餐群
-order_group = robot.groups().search('加班订饭群')[0]
-global order_info  # 在使用前初次声明
-global order_is_start  # 在使用前初次声明
-# 给全局变量赋值
-order_info = {}
-order_is_start = False
-global split_key
-split_key = '######'
+order_group1 = robot.groups().search('加班订饭群')[0]
+order_group2 = robot.groups().search('一体化加班订饭群')[0]
+order_group_list = [order_group1, order_group2]
+order1 = Order()
+order1.order_start()
+order2 = Order()
+order2.order_start()
+order_list = [order1, order2]
 # 不用艾特也可以接受消息的群组
 group_free = [group_1]
 
@@ -213,57 +213,30 @@ def ignore_mps(msg):
 
 # 订餐群回复
 
-@robot.register(order_group, TEXT)
+@robot.register(order_group1, TEXT)
 def recieve_order(msg):
-    log.logger.info("订餐群接收消息:")
-    log.logger.info(msg)
-    global order_is_start
-    global order_info
-    if order_is_start:
-        name = msg.member.name
-        user_name = msg.member.user_name
-        value = 0
-
-        key = user_name
-        if key in order_info:
-            value = int(order_info[key].split(split_key)[1])
-        if ('1' == msg.text):
-            order_info[key] = name + split_key + str(value + 1)
-        elif ('-1' == msg.text):
-            order_info[key] = name + split_key + str(value - 1)
-        else:
-            return
-        order_data = get_order_data(order_info)
-
-        ret = '@' + name + ' 已经收到 \n  -------当前订餐信息----\n ' + order_data + ' \n\n\n ps: 订餐规则(可以累计):\n 1 订餐 \n -1 取消订餐'
-        return ret
+    try:
+        log.logger.info("订餐群接收消息:")
+        log.logger.info(msg)
+        if order1.get_order_is_start:
+            name = msg.member.name
+            user_name = msg.member.user_name
+            return order1.ordering(name, user_name,  msg.text)
+    except BaseException as e:
+        log.logger.error("订餐群接收消息异常" + e)
 
 
-# 订餐数据
-def get_order_data(order_info):
-    order_data = ''
-    if order_info:
-        sum = 0
-        summsg = ''
-        namemsg=''
-        for key in order_info:
-            print(key + ':' + str(order_info[key]))
-            values = order_info[key].split(split_key)
-            u_name = values[0]
-            num = int(values[1])
-            if num > 0:
-                sum = sum + num
-                summsg = '\n\n' + '----------汇总---------- ' + '\n总共 ' + str(sum) + '份 \n'
-                if namemsg == '':
-                    namemsg = u_name
-                else:
-                    namemsg = namemsg + ','+ u_name
-                order_data = order_data + '\n' + u_name + '     订' + str(num) + '份'
-    if order_data == '':
-        order_data = '\n今天无人订餐呦!'
-    else:
-        order_data=order_data + summsg+namemsg
-    return order_data
+@robot.register(order_group2, TEXT)
+def recieve_order(msg):
+    try:
+        log.logger.info("订餐群接收消息:")
+        log.logger.info(msg)
+        if order2.get_order_is_start:
+            name = msg.member.name
+            user_name = msg.member.user_name
+            return order2.ordering(name, user_name,  msg.text)
+    except BaseException as e:
+        log.logger.error("订餐群接收消息异常" + e)
 
 
 # 特定的群接收消息并自由回复
@@ -454,16 +427,17 @@ def group_auto_send():
         log.logger.error(e)
 
 
+# 开始订餐
 def order_auto_start():
     try:
         log.logger.info("----今日订餐开始--")
         isWorkdate = workDate.checkWorkDate()
         if isWorkdate:
-            global order_info
-            order_info = {}
-            global order_is_start
-            order_is_start = True
-            order_group.send('开始订餐啦！订餐规则(可以累计):\n 1 订餐 \n -1 取消订餐 ')
+            for index in range(len(order_group_list)):
+                order_group = order_group_list[index]
+                order = order_list[index]
+                order_group.send('开始订餐啦！订餐规则(可以累计):\n 1 订餐 \n -1 取消订餐 ')
+                order.order_start()
         # log.logger.info(todayNewsContent)
     except BaseException as e:
         log.logger.error("今日订餐开始-失败了" + e)
@@ -475,13 +449,13 @@ def order_auto_ag():
         log.logger.info("----今日订餐开始--")
         isWorkdate = workDate.checkWorkDate()
         if isWorkdate:
-            global order_is_start
-            order_is_start = True
-            global order_info
-            order_data = get_order_data(order_info)
-            order_group.send(
-                '还有订餐的吗，最后一趟啦！\n' + '-------今日已订餐信息------\n' + order_data + '\n ps:订餐规则(可以累加):\n 1 订餐 \n -1 取消订餐 ')
-        # log.logger.info(todayNewsContent)
+            for index in range(len(order_group_list)):
+                order_group = order_group_list[index]
+                order = order_list[index]
+                order_data = order.get_order_data()
+                order_group.send(
+                    '还有订餐的吗，最后一趟啦！\n' + '-------今日已订餐信息------\n' + order_data + '\n ps:订餐规则(可以累加):\n 1 订餐 \n -1 取消订餐 ')
+    # log.logger.info(todayNewsContent)
     except:
         log.logger.error("今日订餐开始-失败了")
 
@@ -491,12 +465,12 @@ def order_auto_end():
         log.logger.info("----今日订餐结束--")
         isWorkdate = workDate.checkWorkDate()
         if isWorkdate:
-            global order_is_start
-            order_is_start = False
-            global order_info
-            order_data = get_order_data(order_info)
-            order_group.send('今日订餐结束啦\n-------今日订餐信息------\n' + order_data)
-            order_info = {}
+            for index in range(len(order_group_list)):
+                order_group = order_group_list[index]
+                order = order_list[index]
+                order_data = order.get_order_data()
+                order_group.send('今日订餐结束啦\n-------今日订餐信息------\n' + order_data)
+                order.order_end()
         # log.logger.info(todayNewsContent)
     except BaseException as e:
         log.logger.error("今日订餐结束失败了")
@@ -504,10 +478,10 @@ def order_auto_end():
 
 
 # 定时提醒
-#if __name__ == '__main__':
-    #order_auto_start();
-    #order_auto_ag();
-    #group_auto_send();
+# if __name__ == '__main__':
+# order_auto_start();
+# order_auto_ag();
+# group_auto_send();
 log.logger.info("***开始启动定时任务***")
 sched = BlockingScheduler()
 sched.add_job(group_auto_send, 'cron', month='1-12', day='1-31', hour=9, minute=10)  # 设定发送的时间

@@ -1,13 +1,14 @@
 class Order:
-    def __init__(self, is_start):
-        self.is_start = is_start
+    def __init__(self):
+        self.is_start = False
         self.data = {}
         self.split_key = '######'
 
     # 获取订餐数据
-    def get_order_data(self, data):
+    def get_order_data(self):
 
         order_data = ''
+        data = self.data
         split_key = self.split_key
         if data:
             sum = 0
@@ -45,22 +46,19 @@ class Order:
                 data[user_name] = name + split_key + str(value - 1)
             else:
                 return
-            order_data = self.get_order_data(data)
+            self.data = data
+            order_data = self.get_order_data()
             ret = '@' + name + ' 已经收到 \n  -------当前订餐信息----\n ' + order_data + ' \n\n\n ps: 订餐规则(可以累计):\n 1 订餐 \n -1 取消订餐'
             return ret
 
+    # 开始订餐
+    def order_start(self):
+        self.is_start = True
+
     # 结束订餐
     def order_end(self):
-        data = self.data
         self.is_start = False
-        return self.get_order_data(data)
+        self.data = {}
 
-
-order1 = Order(True)
-msg = order1.ordering('陈华富', 't44', '1')
-print(msg)
-msg = order1.ordering('周宁宁', 't55', '1')
-print(msg)
-order1.order_end()
-msg = order1.ordering('陈华富', 't44', '-1')
-print(msg)
+    def get_order_is_start(self):
+        return self.is_start
